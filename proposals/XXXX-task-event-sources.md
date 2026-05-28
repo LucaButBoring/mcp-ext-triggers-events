@@ -95,7 +95,7 @@ interface TaskEventSource {
 
 ### Server Requirements
 
-Servers **MUST NOT** include `eventSource` in `CreateTaskResult` unless the server and client has declared the Events capability. When a server includes `eventSource`:
+Servers **MUST NOT** include `eventSource` in `CreateTaskResult` unless the server and client have declared the Events capability. When a server includes `eventSource`:
 
 1. The named event type **MUST** be resolvable via `events/list`.
 2. The provided `input` **MUST** be valid according to the event type's `inputSchema`.
