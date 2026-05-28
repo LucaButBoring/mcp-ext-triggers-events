@@ -56,6 +56,15 @@ interface TaskEventSource {
    * type's inputSchema.
    */
   input: object;
+
+  /**
+   * An opaque cursor marking the event stream position at task creation.
+   * The client passes this as the subscription cursor to replay events
+   * emitted before it subscribed. Omitted when the event type does not
+   * support replay, in which case the client subscribes from the current
+   * position.
+   */
+  initialCursor?: string;
 }
 ```
 
@@ -77,7 +86,8 @@ interface TaskEventSource {
       "name": "ci.stage_results",
       "input": {
         "taskId": "786512e2-9e0d-44bd-8f29-789f320fe840"
-      }
+      },
+      "initialCursor": "evt-cursor-0"
     }
   }
 }
@@ -90,6 +100,7 @@ Servers **MUST NOT** include `eventSource` in `CreateTaskResult` unless the serv
 1. The named event type **MUST** be resolvable via `events/list`.
 2. The provided `input` **MUST** be valid according to the event type's `inputSchema`.
 3. A client that subscribes with the provided `name` and `input` **MUST** receive events related to the associated task.
+4. If the event type supports replay, the server **SHOULD** populate `initialCursor` with a cursor marking the stream position at task creation, so that a client subscribing with it does not miss events emitted before its subscription is established. The server **MUST** omit `initialCursor` for event types that do not support replay.
 
 Servers **MAY** include `eventSource` on some task instances and omit it on others for the same tool, based on expected duration, arguments, or resource availability.
 
@@ -97,7 +108,7 @@ Servers **MAY** include `eventSource` on some task instances and omit it on othe
 
 When a client receives a `CreateTaskResult` with `eventSource` defined:
 
-1. The client **SHOULD** subscribe to the event source using the provided `name` and `input`, following the Events primitive's subscription semantics.
+1. The client **SHOULD** subscribe to the event source using the provided `name` and `input`, following the Events primitive's subscription semantics. If `initialCursor` is present, the client **SHOULD** subscribe with it as the cursor to replay events emitted before the subscription is established; otherwise the client subscribes from the current position.
 2. If the client does not support Events or subscription fails, the client **MUST** continue polling via `tasks/get`.
 3. The client **SHOULD** deliver received events to the model. The delivery mechanism is implementation-defined.
 4. The client **MUST NOT** treat the event stream as a substitute for task status observation. Clients **MUST** continue observing task status via `tasks/get` or `notifications/tasks`.
@@ -177,10 +188,10 @@ sequenceDiagram
 
     Note over C,S: Task Creation
     C->>S: tools/call {name: "run_ci", arguments: {branch: "feature/auth-refactor"}}
-    S->>C: CreateTaskResult {resultType: "task", taskId: "ci-001",<br/>status: "working", eventSource: {name: "ci.stage_results",<br/>input: {taskId: "ci-001"}}}
+    S->>C: CreateTaskResult {resultType: "task", taskId: "ci-001",<br/>status: "working", eventSource: {name: "ci.stage_results",<br/>input: {taskId: "ci-001"}, initialCursor: "evt-cursor-0"}}
 
-    Note over C,S: Client subscribes to event source
-    C->>S: events/stream {name: "ci.stage_results",<br/>params: {taskId: "ci-001"}}
+    Note over C,S: Client subscribes from the initial cursor
+    C->>S: events/stream {name: "ci.stage_results",<br/>params: {taskId: "ci-001"}, cursor: "evt-cursor-0"}
     S--)C: notifications/events/active
 
     Note over C,H: Client informs host of task creation
